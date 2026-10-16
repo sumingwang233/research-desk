@@ -1,0 +1,12 @@
+node_modules/
+release/
+acceptance/
+.code-review-graph/
+.env
+.env.*
+*.pem
+*.key
+*credentials*
+model-settings.json
+research-data/
+renderer/dist/

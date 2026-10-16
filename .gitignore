@@ -1,0 +1,16 @@
+node_modules/
+release/
+acceptance/
+*.log
+.code-review-graph/*.db
+.code-review-graph/*.db-*
+renderer/dist/
+.code-review-graph/
+.local/
+research-data/
+workspace/
+.env
+.env.*
+*.pem
+*.key
+model-settings.json
