@@ -22,11 +22,20 @@ async function waitFor(fn, timeout = 15000) { const start = Date.now(); while (D
   assert.equal(await evaluate('typeof require'), 'undefined');
   assert.equal(await evaluate('typeof process'), 'undefined');
   assert.equal(await evaluate('typeof window.desk.session'), 'function');
+  // UI 由主进程的自定义协议装载，本地服务不再对外发页面
+  assert.equal(await evaluate('location.protocol'), 'app:');
+  const staticProbe = await fetch(`${desktop.origin}/index.html`, { headers: { Authorization: `Bearer ${desktop.token}` } });
+  assert.equal(staticProbe.status, 404);
   assert.equal(JSON.stringify(await read('/api/bootstrap')).includes('local-smoke-only-key'), false);
   await evaluate('document.querySelector("#new-project").click()');
   await waitFor(() => evaluate('Boolean(document.querySelector("#project-input"))'));
   await evaluate('document.querySelector("#project-input").value="人机协作中的信任校准"; document.querySelector("#direction-input").value="探索信任、依赖与协作表现之间的关系"; document.querySelector("#project-form").requestSubmit();');
   await waitFor(() => evaluate('document.querySelector("#project-name").textContent === "人机协作中的信任校准"'));
+  // 新项目落在无会话状态：主区应是项目概览，而不是一片空白
+  await waitFor(() => evaluate('Boolean(document.querySelector(".overview"))'));
+  assert.equal(await evaluate('document.querySelector(".overview-actions").children.length'), 3);
+  await new Promise(resolve => setTimeout(resolve, 350)); // 等对话框退场动画跑完再拍
+  await fs.writeFile(path.join(output, 'desktop-overview.png'), (await desktop.window.webContents.capturePage()).toPNG());
   await evaluate('document.querySelector("[data-view=library]").click()');
   await waitFor(() => evaluate('Boolean(document.querySelector("#search-query"))'));
   await evaluate('document.querySelector("#search-query").value="human AI trust"; document.querySelector("#search-form").requestSubmit();');
@@ -49,6 +58,15 @@ async function waitFor(fn, timeout = 15000) { const start = Date.now(); while (D
   assert.equal(await evaluate('Boolean(document.querySelector(".reasoning-part"))'), true);
   assert.equal(await evaluate('document.querySelectorAll(".tool-row.completed").length >= 2'), true);
   await fs.writeFile(path.join(output, 'desktop-research.png'), (await desktop.window.webContents.capturePage()).toPNG());
+  // 资料抽屉：默认收起，打开后正文让位而不是被盖住
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".evidence-panel")).display'), 'none');
+  await evaluate('document.querySelector("#toggle-evidence").click()');
+  await waitFor(() => evaluate('document.body.classList.contains("show-evidence")'));
+  // 让位是带过渡的：等到几何真正不重叠再断言，而不是点击瞬间就断言
+  await waitFor(() => evaluate('document.querySelector("#composer").getBoundingClientRect().right <= document.querySelector("#evidence-panel").getBoundingClientRect().left'));
+  await new Promise(resolve => setTimeout(resolve, 350));
+  await fs.writeFile(path.join(output, 'desktop-evidence.png'), (await desktop.window.webContents.capturePage()).toPNG());
+  await evaluate('document.querySelector("#toggle-evidence").click()');
   // 排队 → 停止 → 自动发出；失败任务出现重发入口
   await evaluate('document.querySelector("#question").value="[stop] 阻塞中的研究"; document.querySelector("#composer").requestSubmit();');
   await waitFor(async () => (await read('/api/bootstrap')).tasks.some(t => t.status === 'running'));
@@ -57,7 +75,8 @@ async function waitFor(fn, timeout = 15000) { const start = Date.now(); while (D
   await evaluate('document.querySelector("#stop-task").click()');
   await waitFor(async () => (await read('/api/bootstrap')).tasks.some(t => t.status === 'stopped'));
   await waitFor(async () => { const d = await read('/api/bootstrap'); return d.tasks.length === 3 && d.tasks[2].status === 'waiting_permission'; });
-  await evaluate('document.querySelector(".permission-actions .primary").click()');
+  await waitFor(() => evaluate('Boolean(document.querySelector(".permission:not(.question-card) .permission-actions .primary"))'));
+  await evaluate('document.querySelector(".permission:not(.question-card) .permission-actions .primary").click()');
   await waitFor(async () => (await read('/api/bootstrap')).tasks[2].status === 'completed');
   assert.equal(await evaluate('document.querySelector("#thread").textContent.includes("排队发送的后续问题")'), true);
   assert.equal(await evaluate('document.querySelector("#thread").textContent.includes("重发这条研究问题")'), true);
@@ -81,6 +100,81 @@ async function waitFor(fn, timeout = 15000) { const start = Date.now(); while (D
   await waitFor(() => evaluate('!document.querySelector("#settings-dialog")?.open'));
   assert.equal((await fs.readFile(path.join(dataDir, 'model-settings.json'), 'utf8')).includes('local-replacement-key'), false);
   assert.equal(JSON.stringify(await read('/api/bootstrap')).includes('local-replacement-key'), false);
+  // 供应商下拉 + mock 回放：工作区绑定与提问卡全链路
+  const workdir = path.join(dataDir, 'local-research'); await fs.mkdir(workdir, { recursive: true });
+  await fs.writeFile(path.join(workdir, 'background.md'), '# 研究背景\n\n本地验收资料。');
+  await evaluate('document.querySelector("#model-status").click()');
+  await waitFor(() => evaluate('document.querySelector("#settings-dialog")?.open'));
+  // 供应商选择器：分组卡片 + 目录模型，而不是写死的 5 项下拉
+  await evaluate('document.querySelector("#pick-provider").click()');
+  await waitFor(() => evaluate('Boolean(document.querySelector(".picker-shell"))'));
+  assert.equal(await evaluate('document.querySelectorAll(".picker-group").length'), 2);
+  assert.equal(await evaluate('document.querySelectorAll(".provider-card").length > 20'), true);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  await fs.writeFile(path.join(output, 'desktop-provider.png'), (await desktop.window.webContents.capturePage()).toPNG());
+  await evaluate('[...document.querySelectorAll(".provider-card")].find(card => card.textContent.includes("Anthropic")).click()');
+  await waitFor(() => evaluate('document.querySelector("#provider-input")?.value === "anthropic"'));
+  await waitFor(() => evaluate('document.querySelectorAll("#model-options option").length > 5'));
+  assert.equal(await evaluate('document.querySelector("#model-input").value.length > 0'), true);
+  // 切到本地回放：模型自动落到可提交的默认值
+  await evaluate('document.querySelector("#pick-provider").click()');
+  await waitFor(() => evaluate('Boolean(document.querySelector(".picker-shell"))'));
+  await evaluate('[...document.querySelectorAll(".provider-card")].find(card => card.textContent.includes("本地回放")).click()');
+  await waitFor(() => evaluate('document.querySelector("#provider-input")?.value === "mock"'));
+  await evaluate('document.querySelector("#settings-form").requestSubmit()');
+  await waitFor(async () => (await read('/api/bootstrap')).settings.provider === 'mock');
+
+  // 思考等级映射：把 low 档设成自定义值并保存
+  await evaluate('document.querySelector("#model-status").click()');
+  await waitFor(() => evaluate('document.querySelector("#settings-dialog")?.open'));
+  await evaluate('document.querySelector(".thinking-toggle").click()');
+  await waitFor(() => evaluate('document.querySelectorAll(".thinking-mode").length === 7'));
+  await evaluate(`(() => {
+    const set = (el, value) => {
+      const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+      el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+    };
+    set(document.querySelector('.thinking-mode[data-level=low]'), 'custom');
+    return true;
+  })()`);
+  await waitFor(() => evaluate('Boolean(document.querySelector(".thinking-value"))'));
+  await evaluate(`(() => {
+    const el = document.querySelector('.thinking-value');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, 'high');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  await evaluate('document.querySelector("#settings-form").requestSubmit()');
+  await waitFor(async () => (await read('/api/bootstrap')).settings.thinkingLevelMap?.low === 'high');
+  await evaluate('document.querySelector("#model-status").click()');
+  await waitFor(() => evaluate('document.querySelector("#settings-dialog")?.open'));
+  await evaluate('document.querySelector(".thinking-toggle").click()');
+  await waitFor(() => evaluate('document.querySelectorAll(".thinking-mode").length === 7'));
+  await new Promise(resolve => setTimeout(resolve, 300));
+  await fs.writeFile(path.join(output, 'desktop-thinking.png'), (await desktop.window.webContents.capturePage()).toPNG());
+  await evaluate('(() => { const d = [...document.querySelectorAll("dialog")].find(item => item.id === "settings-dialog" && item.open); d?.querySelector(".close-dialog")?.click(); return true; })()');
+  await waitFor(() => evaluate('![...document.querySelectorAll("dialog")].some(item => item.id === "settings-dialog" && item.open)'));
+  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [workdir] });
+  await evaluate('document.querySelector("#edit-project").click()');
+  await waitFor(() => evaluate('Boolean(document.querySelector("#pick-workdir"))'));
+  await evaluate('document.querySelector("#pick-workdir").click()');
+  await waitFor(() => evaluate('document.querySelector("#workdir-input").value.length > 0'));
+  await evaluate('document.querySelector("#project-form").requestSubmit();');
+  await waitFor(async () => Boolean((await read('/api/bootstrap')).projects[0].workdir));
+  dialog.showOpenDialog = originalOpen;
+  await evaluate('document.querySelector("[data-view=research]").click()');
+  await waitFor(() => evaluate('Boolean(document.querySelector("#question"))'));
+  await evaluate('document.querySelector("#question").value="工作区 读取本地资料"; document.querySelector("#composer").requestSubmit();');
+  await waitFor(() => evaluate('document.querySelector("#thread").textContent.includes("已读取工作区资料")'));
+  await evaluate('document.querySelector("#question").value="请先提问再研究"; document.querySelector("#composer").requestSubmit();');
+  await waitFor(() => evaluate('Boolean(document.querySelector(".question-card"))'));
+  assert.equal(await evaluate('document.querySelectorAll(".question-card .question-option").length'), 4);
+  assert.equal(await evaluate('document.querySelector(".question-card .permission-countdown").textContent.includes("后自动拒绝")'), true);
+  await fs.writeFile(path.join(output, 'desktop-question.png'), (await desktop.window.webContents.capturePage()).toPNG());
+  await evaluate('document.querySelectorAll(".question-card .question-option input")[1].click(); document.querySelector(".question-card .permission-actions .primary").click();');
+  await waitFor(() => evaluate('document.querySelector("#thread").textContent.includes("明白，我们优先关注")'));
+  await fs.writeFile(path.join(output, 'desktop-workspace.png'), (await desktop.window.webContents.capturePage()).toPNG());
   desktop.window.setSize(1000, 720);
   await evaluate('document.querySelector("[data-view=research]").click()');
   assert.equal(await evaluate('document.querySelector("#composer").getBoundingClientRect().right <= innerWidth'), true);
@@ -90,7 +184,7 @@ async function waitFor(fn, timeout = 15000) { const start = Date.now(); while (D
   await evaluate('document.querySelector("#toggle-evidence").click()');
   await fs.writeFile(path.join(output, 'desktop-compact.png'), (await desktop.window.webContents.capturePage()).toPNG());
   await waitFor(() => desktop.workers.size === 0);
-  const result = { passed: true, runtime: process.versions.electron, node: process.versions.node, platform: process.platform, cases: ['sandbox preload + protected session', 'project creation', 'Crossref search and save', 'real utilityProcess task', 'permission before note write', 'source citation', 'plain text injection safety', 'reasoning part and tool cards', 'queued send settles after stop', 'failed task resend entry', 'note import/export via IPC (dialogs stubbed)', 'encrypted key storage', 'compact evidence toggle', 'worker exit'], dataDirectory: dataDir };
+  const result = { passed: true, runtime: process.versions.electron, node: process.versions.node, platform: process.platform, cases: ['sandbox preload + protected session', 'project creation', 'Crossref search and save', 'real utilityProcess task', 'permission before note write', 'source citation', 'plain text injection safety', 'reasoning part and tool cards', 'queued send settles after stop', 'failed task resend entry', 'note import/export via IPC (dialogs stubbed)', 'encrypted key storage', 'provider preset dropdown', 'mock replay provider in real app', 'workspace binding via directory picker', 'workspace read-only tools in task', 'ask-user-question card with countdown', 'compact evidence toggle', 'worker exit'], dataDirectory: dataDir };
   await fs.writeFile(path.join(output, 'desktop-smoke.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
   await desktop.shutdown(); await mock.close(); app.exit(0);

@@ -1,25 +1,33 @@
-const { app, BrowserWindow, ipcMain, utilityProcess, safeStorage, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, utilityProcess, safeStorage, dialog, shell, protocol } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 
+const { RENDERER_SCHEME, RENDERER_ORIGIN, RENDERER_URL, rendererProtocol } = require('./renderer-protocol.cjs');
+const workspace = require('./workspace.cjs');
+
+/* 渲染进程改成用自定义协议装载（对齐 ClawsGO：UI 文件由主进程发，本地服务只做 API）。
+   注册为 standard/secure 才能拿到稳定 origin，并允许页面 fetch 本机 loopback API。 */
+protocol.registerSchemesAsPrivileged([{ scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+
 async function startDesktop(options = {}) {
   await app.whenReady();
   const root = path.resolve(__dirname, '..');
-  const { modelSettings, importName, publicError, httpsUrl } = await import(pathToFileURL(path.join(root, 'service/validation.mjs')).href);
+  const { modelSettings, isConfigured, importName, publicError, httpsUrl } = await import(pathToFileURL(path.join(root, 'service/validation.mjs')).href);
   const dataDir = options.dataDir || path.join(app.getPath('userData'), 'research-data');
   await fs.mkdir(dataDir, { recursive: true });
   const settingsFile = path.join(dataDir, 'model-settings.json');
-  let settings = { provider: 'openai-compatible', endpoint: '', model: '', maxRounds: 8, effort: '', configured: false };
+  let settings = { provider: 'custom', endpoint: '', model: '', maxRounds: 8, effort: '', configured: false };
   let apiKey = '', origin = '', quitting = false;
-  if (options.settings) { settings = modelSettings(options.settings); settings.configured = true; apiKey = options.settings.apiKey || ''; }
+  if (options.settings) { settings = modelSettings(options.settings); settings.configured = isConfigured(settings); apiKey = options.settings.apiKey || ''; }
   else {
     try {
       const saved = JSON.parse(await fs.readFile(settingsFile, 'utf8'));
       settings = modelSettings(saved);
       if (saved.encryptedKey && safeStorage.isEncryptionAvailable()) apiKey = safeStorage.decryptString(Buffer.from(saved.encryptedKey, 'base64'));
-      settings.configured = Boolean(settings.endpoint && settings.model);
+      // 内置供应商的地址由目录提供，不能再拿 endpoint 判断是否配置完成
+      settings.configured = isConfigured(settings);
     } catch (error) { if (error.code !== 'ENOENT') settings.warning = '模型配置无法恢复，请重新配置；原文件已保留'; }
   }
   const publicSettings = () => ({ ...settings, apiKeyConfigured: Boolean(apiKey), encryptedStorage: safeStorage.isEncryptionAvailable() });
@@ -29,7 +37,7 @@ async function startDesktop(options = {}) {
   window.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   window.webContents.session.setPermissionCheckHandler(() => false);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  window.webContents.on('will-navigate', (event, url) => { if (!origin || new URL(url).origin !== origin) event.preventDefault(); });
+  window.webContents.on('will-navigate', (event, url) => { if (!String(url).startsWith(RENDERER_URL)) event.preventDefault(); });
   const service = utilityProcess.fork(path.join(root, 'service/server.mjs'), [], { serviceName: 'Research Desk Local Service', stdio: 'pipe' });
   const fail = error => { if (!quitting) { dialog.showErrorBox('研序启动失败', publicError(error)); app.quit(); } };
   service.on('exit', () => { if (!quitting) fail(new Error('本地服务已退出。请重新启动研序；已保存资料仍在本机。')); });
@@ -64,16 +72,32 @@ async function startDesktop(options = {}) {
     });
     service.once('exit', () => { clearTimeout(timeout); reject(new Error('本地服务无法启动')); });
   });
-  service.once('spawn', () => service.postMessage({ type: 'initialize', options: { directory: path.join(dataDir, 'workspace'), staticDir: path.join(root, 'renderer/dist'), token, settings: publicSettings(), ...(options.paperEndpoint ? { paperEndpoint: options.paperEndpoint } : {}) } }));
+  service.once('spawn', () => service.postMessage({ type: 'initialize', options: { directory: path.join(dataDir, 'workspace'), rendererOrigin: RENDERER_ORIGIN, token, settings: publicSettings(), ...(options.paperEndpoint ? { paperEndpoint: options.paperEndpoint } : {}) } }));
+  protocol.handle(RENDERER_SCHEME, rendererProtocol(path.join(root, 'renderer/dist')));
   const guard = event => {
-    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame?.origin !== origin) throw new Error('不允许来自此页面的桌面请求');
+    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('不允许来自此页面的桌面请求');
+    if (!String(event.senderFrame?.url || '').startsWith(RENDERER_URL)) throw new Error('不允许来自此页面的桌面请求');
   };
   const local = async (route, body) => {
     const response = await fetch(`${origin}${route}`, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}`, Origin: origin, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const data = await response.json(); if (!response.ok) throw new Error(data.error); return data;
   };
+  /* 项目目录从服务端的 bootstrap 里取：绑定关系只有一处真相，不做双份缓存 */
+  const projectWorkdir = async projectId => {
+    if (typeof projectId !== 'string' || !/^[\w-]{1,80}$/.test(projectId)) throw new Error('无效项目');
+    const data = await local('/api/bootstrap');
+    const project = data.projects.find(item => item.id === projectId);
+    if (!project) throw new Error('项目不存在');
+    if (!project.workdir) throw new Error('这个项目还没有绑定本地文件夹');
+    return project.workdir;
+  };
   const handlers = {
     session: async () => ({ token, origin }),
+    /* 工作区读写：路径解析与限额都在 workspace.cjs，这里只负责把 projectId 换成目录 */
+    listWorkspace: async projectId => workspace.list(await projectWorkdir(projectId)),
+    readWorkspaceFile: async (projectId, relative) => workspace.readText(await projectWorkdir(projectId), relative),
+    readWorkspaceBinary: async (projectId, relative) => workspace.readBinary(await projectWorkdir(projectId), relative),
+    saveWorkspaceFile: async (projectId, relative, text) => workspace.writeText(await projectWorkdir(projectId), relative, text),
     settings: async () => publicSettings(),
     saveSettings: async input => {
       const next = modelSettings(input);
@@ -82,7 +106,7 @@ async function startDesktop(options = {}) {
       const encryptedStorage = safeStorage.isEncryptionAvailable();
       const saved = { ...next, encryptedKey: nextKey && encryptedStorage ? safeStorage.encryptString(nextKey).toString('base64') : '' };
       await fs.writeFile(`${settingsFile}.tmp`, JSON.stringify(saved), { mode: 0o600 }); await fs.rename(`${settingsFile}.tmp`, settingsFile);
-      apiKey = nextKey; settings = { ...next, configured: true };
+      apiKey = nextKey; settings = { ...next, configured: isConfigured(next) };
       service.postMessage({ type: 'settings', settings: publicSettings() });
       return publicSettings();
     },
@@ -120,7 +144,7 @@ async function startDesktop(options = {}) {
   });
   app.on('before-quit', event => { if (!quitting) { event.preventDefault(); void shutdown().then(() => app.quit()); } });
   window.on('closed', () => { if (!quitting) app.quit(); });
-  try { await ready; await window.loadURL(origin); }
+  try { await ready; await window.loadURL(RENDERER_URL); }
   catch (error) { await shutdown(); window.destroy(); throw error; }
   window.show();
   return { window, service, workers, origin, token, dataDir, shutdown };

@@ -1,0 +1,694 @@
+/* ========================================
+   基础重置 · 排版
+   ======================================== */
+
+:root {
+    font-family: var(--font-ui);
+    font-size: 16px;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    display: flex;
+    background: var(--bg);
+    color: var(--text);
+    font-size: var(--fs-body);
+    line-height: 1.6;
+    /* 纸张质感：极淡的暖色渐层，替代位图纹理，不依赖外部资源 */
+    background-image:
+        radial-gradient(1200px 700px at 12% -10%, rgba(255, 253, 247, 0.75), transparent 70%),
+        radial-gradient(900px 600px at 100% 110%, rgba(216, 207, 190, 0.18), transparent 65%);
+    background-attachment: fixed;
+}
+
+#root {
+    display: contents;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+    margin: 0;
+}
+
+h1 {
+    font-size: 1.8rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+h2 {
+    font-size: var(--fs-title);
+    font-weight: 600;
+}
+
+h3 {
+    font-weight: 600;
+}
+
+a {
+    color: var(--link);
+    text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+    color: inherit;
+}
+
+/* 图标永不被压窄，并跟随父级文字色 */
+button svg,
+a svg,
+summary svg {
+    flex: none;
+}
+
+button {
+    border: 0;
+    background: none;
+    cursor: default;
+    transition:
+        background var(--duration-fast) var(--ease-out),
+        color var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out),
+        opacity var(--duration-fast) var(--ease-out),
+        transform var(--duration-fast) var(--ease-out);
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+input,
+textarea,
+select {
+    color: var(--text);
+}
+
+[hidden] {
+    display: none !important;
+}
+
+::selection {
+    background: rgba(var(--accent-rgb), 0.18);
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip: rect(0, 0, 0, 0);
+    overflow: hidden;
+}
+
+/* 滚动条：细、暖灰，不抢视觉 */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(107, 97, 88, 0.28) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: rgba(107, 97, 88, 0.22);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 97, 88, 0.36);
+    background-clip: content-box;
+}
+
+/* ========================================
+   按钮体系
+   .btn 是基类；.primary / .secondary / .ghost 同时是独立类名，
+   保持与既有 DOM 契约（测试脚本按类名选择）兼容。
+   ======================================== */
+
+.btn,
+.primary,
+.secondary,
+.stop-button,
+.text-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    font-family: inherit;
+    line-height: 1;
+    border: var(--border-width) solid transparent;
+    border-radius: var(--radius-card);
+    user-select: none;
+    -webkit-app-region: no-drag;
+}
+
+/* 按压：所有实心/描边控件统一 0.5px 下沉，不放大 */
+.btn:active:not(:disabled),
+.secondary:active:not(:disabled),
+.stop-button:active:not(:disabled) {
+    transform: translateY(0.5px) scale(0.994);
+}
+
+.btn {
+    padding: 0.42rem 0.9rem;
+    font-size: var(--fs-ui);
+}
+
+.btn-sm {
+    padding: 0.28rem 0.62rem;
+    font-size: var(--fs-caption);
+}
+
+.btn-lg {
+    padding: 0.55rem 1.2rem;
+    font-size: var(--fs-body);
+}
+
+/* 尺寸变体也作用于既有类名 */
+.primary,
+.secondary,
+.stop-button {
+    padding: 0.42rem 0.9rem;
+    font-size: var(--fs-ui);
+}
+
+/* ── primary：印章青蓝实心 ── */
+.btn-primary,
+.primary {
+    background: var(--accent);
+    color: #fdfbf6;
+    border-color: var(--accent);
+}
+
+.btn-primary:hover:not(:disabled),
+.primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.btn-primary:active:not(:disabled),
+.primary:active:not(:disabled) {
+    transform: translateY(0.5px);
+    filter: brightness(0.96);
+}
+
+/* ── secondary：底色叠加 ── */
+.btn-secondary,
+.secondary {
+    background: var(--overlay-subtle);
+    color: var(--text);
+    border-color: transparent;
+}
+
+.btn-secondary:hover:not(:disabled),
+.secondary:hover:not(:disabled) {
+    background: var(--overlay-medium);
+}
+
+.btn-secondary:active:not(:disabled),
+.secondary:active:not(:disabled) {
+    background: var(--overlay-strong);
+}
+
+/* ── ghost：文字按钮 ── */
+.btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+    background: var(--overlay-subtle);
+    color: var(--text);
+}
+
+/* ── danger ── */
+.btn-danger {
+    background: var(--danger-bg);
+    color: #fff;
+    border-color: var(--danger-bg);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: var(--danger-bg-hover);
+    border-color: var(--danger-bg-hover);
+}
+
+/* ── 停止：描边珊瑚，hover 反填 ── */
+.stop-button {
+    background: transparent;
+    color: var(--coral);
+    border-color: rgba(var(--coral-rgb), 0.35);
+}
+
+.stop-button:hover:not(:disabled) {
+    background: var(--danger-bg);
+    border-color: var(--danger-bg);
+    color: #fff;
+}
+
+/* ── 文字按钮 ── */
+.text-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0.24rem 0;
+    font-size: var(--fs-ui);
+    color: var(--accent);
+    background: none;
+    border: 0;
+    border-radius: 0;
+    transition:
+        color var(--duration-fast) var(--ease-out),
+        opacity var(--duration-fast) var(--ease-out);
+}
+
+.text-button:hover:not(:disabled) {
+    color: var(--accent-hover);
+    background: none;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-color: rgba(var(--accent-rgb), 0.4);
+}
+
+/* ── 图标按钮 ── */
+.icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    padding: 0;
+    font-size: var(--fs-body);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    transition:
+        background var(--duration-fast) var(--ease-out),
+        color var(--duration-fast) var(--ease-out),
+        transform var(--duration-fast) var(--ease-out);
+}
+
+.icon-button svg {
+    pointer-events: none;
+}
+
+.icon-button:hover:not(:disabled) {
+    background: var(--overlay-medium);
+    color: var(--text);
+}
+
+.icon-button:active:not(:disabled) {
+    background: var(--overlay-strong);
+    transform: scale(0.94);
+}
+
+/* ── 轻量 tooltip：替代原生 title（无法定制、延迟 1s）── */
+[data-tip] {
+    position: relative;
+}
+
+[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 7px);
+    left: 50%;
+    z-index: 60;
+    padding: 0.26rem 0.5rem;
+    font-size: var(--fs-micro);
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    color: var(--bg-card);
+    background: color-mix(in srgb, var(--text) 93%, transparent);
+    border-radius: var(--radius-xs);
+    box-shadow: var(--shadow-float);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -2px);
+    transition:
+        opacity var(--duration-fast) var(--ease-out),
+        transform var(--duration-fast) var(--ease-out);
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 0.22s;
+}
+
+/* ── 加载 spinner ── */
+.btn-spinner,
+.spinner {
+    width: 0.92em;
+    height: 0.92em;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: hana-spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+/* ========================================
+   表单控件
+   ======================================== */
+
+input:not([type='checkbox']):not([type='radio']),
+textarea,
+select {
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    font-size: var(--fs-ui);
+    color: var(--text);
+    background: var(--bg-card);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-input);
+    transition:
+        border-color var(--duration-fast) var(--ease-out),
+        box-shadow var(--duration-fast) var(--ease-out),
+        background var(--duration-fast) var(--ease-out);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+input:not([type='checkbox']):not([type='radio']):hover,
+textarea:hover,
+select:hover {
+    border-color: color-mix(in srgb, var(--border) 60%, var(--text-muted));
+}
+
+input:not([type='checkbox']):not([type='radio']):focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+textarea {
+    resize: vertical;
+    line-height: 1.7;
+}
+
+select {
+    padding-right: 1.6rem;
+    appearance: none;
+    background-image: var(--select-arrow);
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+    accent-color: var(--accent);
+    width: 0.9rem;
+    height: 0.9rem;
+    flex-shrink: 0;
+}
+
+/* ========================================
+   折叠原语
+   用 grid-template-rows 0fr → 1fr 做高度动画，
+   不卸载 DOM（保证锚点与查询可用），也不需要测量高度。
+   ======================================== */
+
+.collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition:
+        grid-template-rows var(--duration-slow) var(--ease-out),
+        opacity var(--duration-fast) var(--ease-out);
+    opacity: 0;
+}
+
+.collapse > * {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.collapse[data-open='true'] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+/* ========================================
+   语义标签
+   ======================================== */
+
+.subtle-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0.2rem 0.5rem;
+    font-size: var(--fs-hint);
+    color: var(--green);
+    background: var(--green-bg);
+    border: var(--border-width) solid rgba(var(--green-rgb), 0.2);
+    border-radius: var(--radius-sm);
+    letter-spacing: 0.02em;
+}
+
+.citation {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.28em;
+    margin: 0 0.05em;
+    font-size: 0.92em;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    background: var(--accent-light);
+    border: 0;
+    border-radius: var(--radius-xs);
+    vertical-align: baseline;
+    transition:
+        background var(--duration-fast) var(--ease-out),
+        color var(--duration-fast) var(--ease-out);
+}
+
+.citation:hover {
+    background: rgba(var(--accent-rgb), 0.16);
+    color: var(--accent-hover);
+}
+
+.citation.unverified {
+    color: var(--coral);
+    background: var(--coral-bg);
+}
+
+/* ========================================
+   Toast
+   ======================================== */
+
+.toast {
+    position: fixed;
+    top: calc(var(--titlebar-h) + var(--navbar-h) + var(--space-12));
+    left: 50%;
+    z-index: 1200;
+    max-width: min(60vw, 26rem);
+    padding: 0.55rem 0.9rem;
+    font-size: var(--fs-ui);
+    line-height: 1.55;
+    color: var(--bg);
+    background: color-mix(in srgb, var(--text) 94%, transparent);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-float);
+    transform: translateX(-50%);
+    animation: hana-slide-in-top var(--duration-slow) var(--ease-out) both;
+}
+
+/* ========================================
+   对话框
+   保留原生 <dialog>（测试依赖 .open 状态），叠加 scrim 与弹入动画。
+   ======================================== */
+
+dialog {
+    /* 全局 * { margin: 0 } 会盖掉 UA 的 margin: auto，弹窗会贴在左上角 */
+    margin: auto;
+    width: 34rem;
+    max-width: 92vw;
+    max-height: 88vh;
+    padding: 0;
+    color: var(--text);
+    background: var(--bg-card);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-dialog);
+    overflow: auto;
+}
+
+dialog[open] {
+    animation: hana-scale-in var(--duration-slow) var(--ease-out) both;
+}
+
+dialog[data-closing] {
+    animation: hana-fade-down var(--duration-fast) var(--ease-in) forwards;
+}
+
+dialog::backdrop {
+    background: var(--scrim-30);
+    backdrop-filter: blur(3px);
+    animation: hana-fade-in var(--duration-fast) var(--ease-out) both;
+}
+
+dialog[data-closing]::backdrop {
+    animation: hana-fade-out var(--duration-fast) var(--ease-in) forwards;
+}
+
+dialog form {
+    padding: var(--space-24);
+}
+
+.dialog-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin-bottom: var(--space-24);
+}
+
+.dialog-heading h2 {
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+.dialog-heading p {
+    margin-top: var(--space-6);
+    font-size: var(--fs-caption);
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.dialog-heading .close-dialog {
+    font-size: 1.15rem;
+    line-height: 1;
+    margin-top: -0.15rem;
+}
+
+dialog label {
+    display: block;
+    margin-top: var(--space-16);
+    font-size: var(--fs-caption);
+    color: var(--text-light);
+    letter-spacing: 0.01em;
+}
+
+dialog input:not([type='checkbox']):not([type='radio']),
+dialog textarea,
+dialog select {
+    margin-top: var(--space-6);
+}
+
+.optional {
+    margin-left: var(--space-4);
+    font-size: var(--fs-hint);
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+.dialog-help {
+    margin-top: var(--space-12);
+    font-size: var(--fs-caption);
+    line-height: 1.7;
+    color: var(--text-muted);
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-8);
+    /* 吸底：表单变长（如展开思考映射）时，保存键不被挤到折叠线以下 */
+    position: sticky;
+    bottom: 0;
+    margin: var(--space-16) calc(-1 * var(--space-24)) calc(-1 * var(--space-24));
+    padding: var(--space-12) var(--space-24) var(--space-24);
+    background: var(--bg-card);
+    border-top: var(--border-width) solid var(--border-soft);
+}
+
+.form-row {
+    display: flex;
+    gap: var(--space-12);
+}
+
+.form-row label {
+    flex: 1;
+    min-width: 0;
+}
+
+.checkbox-row {
+    display: flex !important;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--fs-caption) !important;
+    cursor: default;
+}
+
+.workdir-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+}
+
+.workdir-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.workdir-row .secondary {
+    flex: none;
+}
+
+/* ========================================
+   空状态
+   ======================================== */
+
+.large-empty {
+    padding: var(--space-40) var(--space-24);
+    font-size: var(--fs-ui);
+    line-height: 1.9;
+    color: var(--text-muted);
+    text-align: center;
+}

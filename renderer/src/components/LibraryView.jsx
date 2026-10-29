@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react';
 import { useDesk } from '../store.jsx';
 import { api } from '../api.js';
+import { Button } from './ui/Button.jsx';
+import { EmptyState } from './ui/EmptyState.jsx';
+import { ExternalIcon, LibraryIcon, SearchIcon } from './ui/icons.jsx';
 
 export function LibraryView() {
   const { state, projectId, reload, report, setDialog } = useDesk();
@@ -35,8 +38,13 @@ export function LibraryView() {
       </div>
       <form id="search-form" className="search-form" onSubmit={search}>
         <label className="sr-only" htmlFor="search-query">文献关键词</label>
-        <input id="search-query" ref={queryRef} placeholder="论文标题、主题或研究关键词" maxLength="500" required />
-        <button className="primary" id="search-button" disabled={searching}>检索文献</button>
+        <div className="search-field">
+          <SearchIcon className="search-field-icon" size={14} />
+          <input id="search-query" ref={queryRef} placeholder="论文标题、主题或研究关键词" maxLength="500" required />
+        </div>
+        <Button type="submit" variant="primary" id="search-button" loading={searching} disabled={searching}>
+          {searching ? '检索中' : '检索文献'}
+        </Button>
       </form>
       <div className="library-subhead">
         <h2 id="library-heading">{searchResults ? '检索结果' : '项目文献'}</h2>
@@ -44,7 +52,24 @@ export function LibraryView() {
       </div>
       <div id="papers" className="papers">
         {searchResults && <button className="text-button" onClick={() => { setSearchResults(null); setStatus(''); }}>返回项目文献</button>}
-        {!papers.length && <div className="large-empty">{searchResults ? '没有找到相关元数据。试试英文关键词或更具体的主题。' : '文献库还是空的。输入关键词，开始积累你的研究证据。'}</div>}
+        {!papers.length && (
+          searchResults
+            ? (
+              <EmptyState
+                tone="muted"
+                icon={<SearchIcon size={20} />}
+                title="没有找到相关元数据"
+                hint="试试英文关键词，或用更具体的主题词、作者名缩小范围。"
+              />
+            )
+            : (
+              <EmptyState
+                icon={<LibraryIcon size={20} />}
+                title="文献库还是空的"
+                hint="输入关键词检索公开学术元数据；保存后会出现在项目文献与你与的会话来源栏中。"
+              />
+            )
+        )}
         {papers.map((paper, index) => {
           const saved = projectSources.some(s => (paper.doi ? s.doi === paper.doi : s.title === paper.title));
           return (
@@ -58,11 +83,16 @@ export function LibraryView() {
               </div>
               <div className="paper-actions">
                 {searchResults && (
-                  <button className="secondary" disabled={saved} onClick={() => save(paper).then(() => undefined).catch(report)}>
+                  <Button size="sm" disabled={saved} onClick={() => save(paper).then(() => undefined).catch(report)}>
                     {saved ? '已保存' : '保存文献'}
+                  </Button>
+                )}
+                {paper.url && (
+                  <button className="text-button paper-open" onClick={() => window.desk.openSource(paper.url)}>
+                    <span>打开来源</span>
+                    <ExternalIcon size={11} />
                   </button>
                 )}
-                {paper.url && <button className="text-button" onClick={() => window.desk.openSource(paper.url)}>打开来源 ↗</button>}
               </div>
             </article>
           );

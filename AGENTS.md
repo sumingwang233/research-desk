@@ -12,4 +12,4 @@
 
 ## 验证与边界
 
-遵守用户当次测试授权；不因代码图更新而自动执行测试。获准时使用 `npm test`、`npm run desktop-smoke`、`npm run dist` 和 `npm run packaged-smoke`。模拟模型只在 `test/` 与 `agent/replay.mjs`（`mock://` 地址，不发网络请求）中；未经明确授权，不运行付费模型请求、修改远端资源或读取现有凭据。
+遵守用户当次测试授权；不因代码图更新而自动执行测试。获准时使用 `npm test`、`npm run desktop-smoke`、`npm run dist` 和 `npm run packaged-smoke`。模型层为 `@earendil-works/pi-ai` 适配器（`agent/provider.mjs`），模拟模型只在 `test/` 与 `agent/replay.mjs`（`mock://` 地址，不发网络请求）中；未经明确授权，不运行付费模型请求、不发起 OAuth 登录、不修改远端资源或读取现有凭据。

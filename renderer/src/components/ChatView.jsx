@@ -5,23 +5,38 @@ import { api } from '../api.js';
 import { finished } from '../parts.js';
 import { MessageItem } from './MessageItem.jsx';
 import { Composer } from './Composer.jsx';
+import { ArrowDownIcon, ComposeIcon, FolderIcon, LibraryIcon, NoteIcon } from './ui/icons.jsx';
 
 export function ChatView() {
   const { state, projectId, report, reload, setDialog } = useDesk();
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const [queued, setQueued] = useState(null); // {text, mode}
+  const [showJump, setShowJump] = useState(false);
   const threadRef = useRef(null);
   const nearBottom = useRef(true);
 
   const conversation = state?.conversations.find(c => c.id === conversationId);
   const activeTask = state?.tasks.findLast(t => t.conversationId === conversationId && !finished(t));
 
+  /* 项目概览的计量：来源 / 笔记 / 会话都属于项目层，不属于单条线程 */
+  const project = state?.projects.find(p => p.id === projectId);
+  const counts = {
+    sources: state?.sources.filter(s => s.projectId === projectId).length ?? 0,
+    notes: state?.notes.filter(n => n.projectId === projectId).length ?? 0,
+    sessions: state?.conversations.filter(c => c.projectId === projectId).length ?? 0
+  };
+
+  const scrollToBottom = (smooth = false) => {
+    const el = threadRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
+  };
+
   const send = async (text, mode, clientMessageId) => {
     const task = await api('/api/tasks', { projectId, conversationId, text, mode, clientMessageId: clientMessageId || crypto.randomUUID() });
     await reload();
     if (!conversationId) navigate(`/chat/${task.conversationId}`);
-    requestAnimationFrame(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight; });
+    requestAnimationFrame(() => { nearBottom.current = true; scrollToBottom(); });
   };
 
   // 当前任务 settle 后自动发出排队输入（对齐 interruptAndSend 等 settle 再 dispatch）。
@@ -35,11 +50,14 @@ export function ChatView() {
 
   const onScroll = () => {
     const el = threadRef.current;
-    if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    nearBottom.current = distance < 100;
+    setShowJump(distance > 320);
   };
   useEffect(() => {
     const el = threadRef.current;
-    if (el && nearBottom.current) el.scrollTop = el.scrollHeight;
+    if (el && nearBottom.current) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
   }, [state, conversationId]);
 
   const submit = async (text, mode, clientMessageId) => {
@@ -65,11 +83,24 @@ export function ChatView() {
     <section id="research-view" className="main-view research-view" aria-label="研究助理">
       <div id="thread" className="thread" aria-live="polite" ref={threadRef} onScroll={onScroll}>
         {!conversation
-          ? <EmptyThread hasProject={Boolean(state?.projects.some(p => p.id === projectId))} />
-          : conversation.messages.filter(m => m.role === 'user').map(message => (
-              <MessageItem key={message.id} message={message} task={state.tasks.find(t => t.id === message.taskId)} onResend={() => submit(message.content, task?.mode || 'review', message.clientMessageId).catch(report)} />
-            ))}
+          ? <ProjectOverview project={project} counts={counts} />
+          : conversation.messages.filter(m => m.role === 'user').map(message => {
+              const task = state.tasks.find(t => t.id === message.taskId);
+              return (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  task={task}
+                  onResend={() => submit(message.content, task?.mode || 'review', message.clientMessageId).catch(report)}
+                />
+              );
+            })}
       </div>
+      {showJump && (
+        <button type="button" className="scroll-bottom" aria-label="回到最新" title="回到最新" onClick={() => { nearBottom.current = true; scrollToBottom(true); }}>
+          <ArrowDownIcon />
+        </button>
+      )}
       {queued && (
         <div className="queued-chip" role="status">
           <span>已排队，当前研究结束后发送：{queued.text.slice(0, 40)}{queued.text.length > 40 ? '…' : ''}</span>
@@ -82,23 +113,80 @@ export function ChatView() {
   );
 }
 
-function EmptyThread({ hasProject }) {
-  const { setDialog } = useDesk();
+function ProjectOverview({ project, counts }) {
+  const { setDialog, reload, toast, report } = useDesk();
   const navigate = useNavigate();
-  return (
-    <div className="research-empty">
-      <div className="research-glyph">⌘</div>
-      <p className="welcome-kicker">你的科研工作台</p>
-      <h1>让研究问题有据可循。</h1>
-      <p className="welcome-description">{'从一条线索出发，检索文献、梳理证据，\n把值得探索的想法变成可执行的研究方案。'}</p>
-      <div className="research-path">
-        {[['提出问题', '明确研究对象与边界'], ['寻找证据', '追溯文献与已有线索'], ['形成方案', '整理方法、指标与下一步']].map(([label, detail]) => (
-          <div className="path-step" key={label}><span className="path-dot"></span><strong>{label}</strong><span>{detail}</span></div>
-        ))}
+
+  if (!project) {
+    return (
+      <div className="research-empty">
+        <div className="research-glyph">研</div>
+        <p className="welcome-kicker">你的科研工作台</p>
+        <h1>先建一个研究项目。</h1>
+        <p className="welcome-description">{'来源、笔记和会话都挂在项目下，\n所以第一步是划定一个研究边界。'}</p>
+        <button className="text-button" onClick={() => setDialog({ kind: 'project', edit: false })}>创建第一个研究项目</button>
       </div>
-      <button className="text-button" onClick={() => (hasProject ? navigate('/library') : setDialog({ kind: 'project', edit: false }))}>
-        {hasProject ? '先到文献库寻找线索' : '创建第一个研究项目'}
-      </button>
+    );
+  }
+
+  const askQuestion = () => {
+    const input = document.getElementById('question');
+    if (!input) return;
+    input.focus();
+    input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+
+  const importNote = async () => {
+    const created = await window.desk.importNote(project.id).catch(() => null);
+    if (!created) return;
+    await reload();
+    toast('笔记已导入');
+  };
+
+  return (
+    <div className="overview">
+      <p className="overview-kicker">研究项目</p>
+      <h1 className="overview-title">{project.name}</h1>
+      <p className="overview-direction">
+        {project.direction || '还没写研究方向。补上一句，检索和结论都会更聚焦。'}
+      </p>
+
+      <div className="overview-stats">
+        <span><strong>{counts.sources}</strong>来源</span>
+        <span><strong>{counts.notes}</strong>笔记</span>
+        <span><strong>{counts.sessions}</strong>会话</span>
+      </div>
+
+      <p className="overview-workdir">
+        <FolderIcon size={12} />
+        <span>{project.workdir || '未绑定资料目录'}</span>
+      </p>
+
+      <div className="overview-actions">
+        <button className="overview-action" onClick={askQuestion}>
+          <ComposeIcon size={14} />
+          <span className="overview-action-body">
+            <strong>提出研究问题</strong>
+            <span>描述问题、线索或假设，研究助理会先检索再回答</span>
+          </span>
+        </button>
+        <button className="overview-action" onClick={() => navigate('/library')}>
+          <LibraryIcon size={14} />
+          <span className="overview-action-body">
+            <strong>检索文献</strong>
+            <span>从 Crossref 拉取可追溯的学术元数据</span>
+          </span>
+        </button>
+        <button className="overview-action" onClick={() => importNote().catch(report)}>
+          <NoteIcon size={14} />
+          <span className="overview-action-body">
+            <strong>导入已有笔记</strong>
+            <span>Markdown 或纯文本，作为这一轮研究的起点</span>
+          </span>
+        </button>
+      </div>
+
+      <p className="overview-hint">资料目录以只读方式挂载，研究助理不会改动其中的文件。</p>
     </div>
   );
 }

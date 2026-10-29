@@ -1,35 +1,50 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDesk } from '../store.jsx';
+import { ExternalIcon, NoteIcon, CloseIcon } from './ui/icons.jsx';
 
 export function EvidencePanel() {
-  const { state, projectId, panel, setPanel, focusSourceId, setFocusSourceId, suspendedTasks, reconnect } = useDesk();
+  const { state, projectId, panel, setPanel, focusSourceId, setFocusSourceId, suspendedTasks, reconnect, evidenceOpen, setEvidenceOpen } = useDesk();
   const location = useLocation();
   const navigate = useNavigate();
   const conversationId = location.pathname.match(/^\/chat\/([^/]+)/)?.[1];
   const projectSources = (state?.sources || []).filter(s => s.projectId === projectId);
   const projectNotes = (state?.notes || []).filter(n => n.projectId === projectId);
   const task = state?.tasks.findLast(t => t.conversationId === conversationId);
-  const sources = task?.sources?.length ? task.sources : projectSources;
+  const taskSources = task?.sources || [];
+  const sources = taskSources.length ? taskSources : projectSources;
   const suspended = Object.entries(suspendedTasks).find(([taskId, on]) => on && state?.tasks.some(t => t.id === taskId));
 
+  /* 抽屉刚打开时元素仍是 display:none，定位要等下一帧（body 类生效后） */
   useEffect(() => {
-    if (!focusSourceId) return;
-    const target = document.getElementById(`evidence-${focusSourceId}`);
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    target?.focus();
-    setFocusSourceId(null);
-  }, [focusSourceId, setFocusSourceId, state]);
+    if (!focusSourceId) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`evidence-${focusSourceId}`);
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target?.focus();
+      setFocusSourceId(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusSourceId, setFocusSourceId, evidenceOpen]);
 
   return (
-    <aside id="evidence-panel" className="evidence-panel">
+    <aside id="evidence-panel" className="evidence-panel" aria-label="资料栏">
       <div className="evidence-heading">
-        <div><span className="panel-kicker">研究资料</span><h2>证据与线索</h2></div>
-        <span className="evidence-symbol" aria-hidden="true">⌕</span>
+        <div>
+          <span className="panel-kicker">{taskSources.length ? '本轮引用' : '项目资产'}</span>
+          <h2>{taskSources.length ? '这一轮用到的资料' : '项目资料'}</h2>
+        </div>
+        <button type="button" className="icon-button" aria-label="收起资料" data-tip="收起" onClick={() => setEvidenceOpen(false)}>
+          <CloseIcon size={13} />
+        </button>
       </div>
       <div className="panel-tabs">
-        <button id="panel-sources" className={panel === 'sources' ? 'active' : ''} onClick={() => setPanel('sources')}>来源</button>
-        <button id="panel-notes" className={panel === 'notes' ? 'active' : ''} onClick={() => setPanel('notes')}>笔记</button>
+        <button id="panel-sources" className={panel === 'sources' ? 'active' : ''} onClick={() => setPanel('sources')}>
+          <span>来源</span><span className="panel-count">{sources.length}</span>
+        </button>
+        <button id="panel-notes" className={panel === 'notes' ? 'active' : ''} onClick={() => setPanel('notes')}>
+          <span>笔记</span><span className="panel-count">{projectNotes.length}</span>
+        </button>
       </div>
       {suspended && (
         <div className="reconnect-banner" role="alert">
@@ -50,7 +65,7 @@ function SourceList({ sources }) {
   if (!sources.length) {
     return (
       <div className="panel-empty">
-        <span className="empty-symbol">▤</span>
+        <NoteIcon className="empty-symbol" size={22} />
         <h3>让每个结论找到出处</h3>
         <p>研究中检索到的文献会出现在这里。也可以先在文献库积累线索。</p>
         <button className="text-button" onClick={() => navigate('/library')}>检索文献</button>
@@ -70,7 +85,12 @@ function SourceList({ sources }) {
         <p>{source.abstract || '该条元数据未提供摘要，尚未读取论文全文。'}</p>
         <p className="source-query">{`检索：${source.query || '项目已有来源'}\n获取：${new Date(source.retrievedAt).toLocaleString('zh-CN')}`}</p>
       </details>
-      {source.url && <button className="source-link" onClick={() => window.desk.openSource(source.url)}>打开原始来源 ↗</button>}
+      {source.url && (
+        <button className="source-link" onClick={() => window.desk.openSource(source.url)}>
+          <span>打开原始来源</span>
+          <ExternalIcon size={11} />
+        </button>
+      )}
     </article>
   ));
 }

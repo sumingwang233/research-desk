@@ -21,8 +21,9 @@ async function waitFor(fn, timeout = 20000) { const start = Date.now(); while (D
 try {
   child = spawn(executable, [`--remote-debugging-port=${port}`, `--user-data-dir=${dataDirectory}`], { stdio: 'ignore', windowsHide: true });
   let exited = false; child.on('exit', () => { exited = true; });
-  const page = await waitFor(async () => { const r = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) }); return (await r.json()).find(p => p.type === 'page' && p.url.startsWith('http://127.0.0.1:')); }, 45000);
-  origin = new URL(page.url).origin;
+  /* 渲染层已改成 app:// 自定义协议装载，CDP 里看到的是 app://bundle；
+     本地服务地址需要从 preload 拿，不能再从页面 URL 推。 */
+  const page = await waitFor(async () => { const r = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) }); return (await r.json()).find(p => p.type === 'page' && (p.url.startsWith('app://bundle') || p.url.startsWith('http://127.0.0.1:'))); }, 45000);
   socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
   let sequence = 0; const requests = new Map();
@@ -30,6 +31,10 @@ try {
   const command = (method, params = {}) => new Promise((resolve, reject) => { const id = ++sequence; requests.set(id, { resolve, reject }); socket.send(JSON.stringify({ id, method, params })); });
   const evaluate = async expression => { const result = await command('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true }); if (result.exceptionDetails) throw new Error(result.exceptionDetails.text); return result.result.value; };
   await waitFor(() => evaluate('document.body.dataset.ready === "true"'));
+  const session = await evaluate('window.desk.session()');
+  origin = session.origin;
+  assert.ok(origin.startsWith('http://127.0.0.1:'), '本地服务应监听 loopback');
+  assert.equal(await evaluate('location.protocol'), 'app:');
   assert.equal(await evaluate('typeof require'), 'undefined');
   assert.equal(await evaluate('document.querySelector("#project-name").textContent'), '我的研究空间');
   const unauthorized = await fetch(`${origin}/api/bootstrap`); assert.equal(unauthorized.status, 401);
@@ -46,7 +51,7 @@ try {
   await waitFor(() => exited);
   socket.close(); socket = null;
   await waitFor(async () => { try { await fetch(`${origin}/api/bootstrap`, { signal: AbortSignal.timeout(300) }); return false; } catch { return true; } });
-  const result = { passed: true, artifact: executable, bytes: (await fs.stat(executable)).size, sha256: createHash('sha256').update(await fs.readFile(executable)).digest('hex'), dataDirectory, checks: ['portable executable launch', 'isolated user-data directory', 'sandbox renderer', 'protected local service', 'project persistence', 'window close exits portable process', 'local service port closed'] };
+  const result = { passed: true, artifact: executable, bytes: (await fs.stat(executable)).size, sha256: createHash('sha256').update(await fs.readFile(executable)).digest('hex'), dataDirectory, checks: ['portable executable launch', 'app:// renderer protocol', 'isolated user-data directory', 'sandbox renderer', 'protected local service', 'project persistence', 'window close exits portable process', 'local service port closed'] };
   await fs.writeFile(path.join(root, 'acceptance/packaged-smoke.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } finally { socket?.close(); child?.kill(); }

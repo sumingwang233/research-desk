@@ -29,10 +29,10 @@ export async function replayComplete({ messages, signal, onToken, onReasoning })
     return toolCall('search_papers', { query: question.replace(/\[.*?\]/g, '').split(/[，。,.]/)[0].slice(0, 80) || 'research topic', limit: 5 });
   }
   const last = JSON.parse(results.at(-1).content);
-  if (results.length === 1 && typeof last.answers === 'string') {
+  if (results.length === 1 && ('answers' in last || last.reason === '用户拒绝回答')) {
     await think('用户已明确方向，组织回应。');
     await say(last.allowed
-      ? `明白，我们优先关注「${last.answers.slice(0, 60)}」。\n\n接下来可以围绕这个方向检索公开文献元数据；如果你准备好，告诉我「继续」，我就开始检索。\n\n（本回答由本地回放生成，仅用于界面验证。）`
+      ? `明白，我们优先关注「${String(last.answers).slice(0, 60)}」。\n\n接下来可以围绕这个方向检索公开文献元数据；如果你准备好，告诉我「继续」，我就开始检索。\n\n（本回答由本地回放生成，仅用于界面验证。）`
       : '好的，不急于限定方向。你可以补充更多背景，我们再继续。\n\n（本地回放输出。）');
     return { role: 'assistant', content: spoken };
   }

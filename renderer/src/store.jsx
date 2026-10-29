@@ -11,9 +11,17 @@ export function DeskProvider({ children }) {
   const [projectId, setProjectId] = useState();
   const [toastMessage, setToastMessage] = useState('');
   const [panel, setPanel] = useState('sources');
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [focusSourceId, setFocusSourceId] = useState(null);
   const [suspendedTasks, setSuspendedTasks] = useState({});
-  const [dialog, setDialog] = useState(null); // {kind:'project',edit} | {kind:'settings'} | null
+  const [dialog, setDialogState] = useState(null); // {kind:'project',edit} | {kind:'settings'} | null
+  const dialogSeq = useRef(0);
+  /* 每次打开都分配新 nonce：弹窗退场动画期间重新打开会复用同一 DOM 节点，
+     旧实例的收尾回调会把新弹窗一起关掉。 */
+  const setDialog = useCallback(next => {
+    dialogSeq.current += 1;
+    setDialogState(next ? { ...next, nonce: dialogSeq.current } : null);
+  }, []);
   const [loadError, setLoadError] = useState('');
   const streams = useRef(new Map());
   const toastTimer = useRef();
@@ -98,10 +106,11 @@ export function DeskProvider({ children }) {
     for (const task of state?.tasks.filter(t => !finished(t)) || []) watch(task.id);
   }, [state, watch]);
 
-  const focusSource = useCallback(id => { setPanel('sources'); setFocusSourceId(id); }, []);
+  const focusSource = useCallback(id => { setPanel('sources'); setEvidenceOpen(true); setFocusSourceId(id); }, []);
   const value = {
     state, projectId, setProjectId, reload, report, toast, toastMessage,
     panel, setPanel, focusSource, focusSourceId, setFocusSourceId,
+    evidenceOpen, setEvidenceOpen,
     suspendedTasks, reconnect, watch,
     dialog, setDialog, loadError, api, getSession
   };

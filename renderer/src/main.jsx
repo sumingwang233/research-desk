@@ -6,6 +6,7 @@ import { Shell } from './components/Shell.jsx';
 import { ChatView } from './components/ChatView.jsx';
 import { LibraryView } from './components/LibraryView.jsx';
 import { NotesView } from './components/NotesView.jsx';
+import { WorkspaceView } from './components/WorkspaceView.jsx';
 import './styles.css';
 
 const router = createBrowserRouter([
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
       { path: '/chat/:conversationId', element: <ChatView /> },
       { path: '/library', element: <LibraryView /> },
       { path: '/notes', element: <NotesView /> },
+      { path: '/workspace', element: <WorkspaceView /> },
       { path: '*', element: <Navigate to="/chat" replace /> }
     ]
   }

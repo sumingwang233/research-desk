@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { isBuiltinProvider } from './catalog.mjs';
 
 export class AppError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -16,25 +17,72 @@ export function httpsUrl(value) {
   try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 export const PROVIDER_IDS = ['openai', 'anthropic', 'google', 'openai-compatible', 'mock'];
+export const CUSTOM_PROVIDER = 'custom';
+/** 0.3.2 及以前的"自定义兼容端点"名称，读旧配置时归一化到 custom。 */
+const LEGACY_CUSTOM = 'openai-compatible';
+
+/** 只接受内置供应商、自定义端点、本地回放三类。 */
+function normalizeProvider(input) {
+  const raw = String(input.provider || '').trim();
+  if (!raw) return String(input.endpoint || '').startsWith('mock://') ? 'mock' : CUSTOM_PROVIDER;
+  return raw === LEGACY_CUSTOM ? CUSTOM_PROVIDER : raw;
+}
+
+/** 判断一份设置是否真的可用（内置供应商不需要用户填地址）。 */
+export function isConfigured(settings) {
+  if (!settings || !settings.model) return false;
+  if (settings.provider === 'mock') return true;
+  if (settings.provider === CUSTOM_PROVIDER) return Boolean(settings.endpoint);
+  return isBuiltinProvider(settings.provider);
+}
+
+/** 推理强度：SDK 的 ThinkingLevel 全集，空串表示不干预（由模型决定）。 */
+export const EFFORT_LEVELS = ['', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+/** 可映射的思考档位（含 off：null 表示该模型不允许关闭思考）。 */
+export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+/**
+ * 思考等级映射：默认（不写）/ 禁用（null）/ 自定义（字符串）。
+ * 空字符串当作默认丢弃，避免存一堆无意义的键。
+ */
+function mapInput(raw) {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new AppError('无效的思考等级映射');
+  const out = {};
+  for (const [level, value] of Object.entries(raw)) {
+    if (!THINKING_LEVELS.includes(level)) continue;
+    if (value === null) { out[level] = null; continue; }
+    if (typeof value !== 'string') throw new AppError('思考等级映射须为字符串或禁用');
+    const text = value.trim();
+    if (!text) continue;
+    if (text.length > 40 || /[\u0000-\u001f]/.test(text)) throw new AppError('思考等级映射值不能超过 40 字符');
+    out[level] = text;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function modelSettings(input, current = {}) {
-  const provider = input.provider || (String(input.endpoint || '').startsWith('mock://') ? 'mock' : 'openai-compatible');
-  if (!PROVIDER_IDS.includes(provider)) throw new AppError('无效的模型供应商');
+  const provider = normalizeProvider(input);
+  const custom = provider === CUSTOM_PROVIDER;
+  const mock = provider === 'mock';
+  if (!mock && !custom && !isBuiltinProvider(provider)) throw new AppError('无效的模型供应商');
   const maxRounds = Number(input.maxRounds ?? 8);
   if (!Number.isInteger(maxRounds) || maxRounds < 1 || maxRounds > 20) throw new AppError('模型轮次须为 1–20');
   const effort = input.effort || '';
-  if (!['', 'low', 'medium', 'high'].includes(effort)) throw new AppError('无效的推理强度');
+  if (!EFFORT_LEVELS.includes(effort)) throw new AppError('无效的推理强度');
+  const thinkingLevelMap = mapInput(input.thinkingLevelMap);
+  const extra = thinkingLevelMap ? { thinkingLevelMap } : {};
   const model = text(input.model, '模型名称', 200);
-  if (provider === 'mock') {
+  if (mock) {
     const raw = String(input.endpoint || 'mock://replay');
     if (!/^mock:\/\/[a-z-]{1,40}$/.test(raw)) throw new AppError('无效的本地回放地址');
-    return { provider, endpoint: raw, model, maxRounds, effort, configured: current.configured || false };
+    return { provider, endpoint: raw, model, maxRounds, effort, ...extra, configured: current.configured || false };
   }
-  if (provider !== 'openai-compatible') {
-    // 预设供应商：endpoint 可选，留空使用 pi-ai 内置默认地址；显式提供时按兼容端点同规则校验
-    const endpoint = input.endpoint ? compatibleEndpoint(input.endpoint) : '';
-    return { provider, endpoint, model, maxRounds, effort, configured: current.configured || false };
+  if (custom) {
+    return { provider, endpoint: compatibleEndpoint(text(input.endpoint, '模型地址', 500)), model, maxRounds, effort, ...extra, configured: current.configured || false };
   }
-  return { provider, endpoint: compatibleEndpoint(text(input.endpoint, '模型地址', 500)), model, maxRounds, effort, configured: current.configured || false };
+  // 内置供应商：地址来自目录，不保存用户地址，避免旧值残留在配置里误导排查
+  return { provider, endpoint: '', model, maxRounds, effort, ...extra, configured: current.configured || false };
 }
 function compatibleEndpoint(raw) {
   if (raw.startsWith('mock://')) {

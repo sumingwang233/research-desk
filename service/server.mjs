@@ -5,9 +5,10 @@ import { randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { openStore, terminal } from './store.mjs';
 import { AppError, id, text, projectInput, noteInput, publicError, httpsUrl, SENSITIVE_NAME, WORKSPACE_TEXT_EXT, workspacePath } from './validation.mjs';
 import { searchPapers, questionInput } from '../agent/tools.mjs';
+import { listProviders, listModels, findProvider } from './catalog.mjs';
 
 const timestamp = () => new Date().toISOString();
-export async function createService({ directory, staticDir, token, settings, onStart, onStop, onToolResult, paperEndpoint, permissionMs = 600000 }) {
+export async function createService({ directory, rendererOrigin, token, settings, onStart, onStop, onToolResult, paperEndpoint, permissionMs = 600000 }) {
   const store = await openStore(directory);
   const active = new Map(), listeners = new Map(), workerChains = new Map();
   let config = settings, pumping = false, closing = false;
@@ -219,37 +220,51 @@ export async function createService({ directory, staticDir, token, settings, onS
     try { const data = JSON.parse(Buffer.concat(chunks).toString() || '{}'); if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(); return data; }
     catch { throw new AppError('请求须为 JSON 对象'); }
   }
+  /* 允许两个来源：本地服务自己的 origin（主进程代唤），以及渲染进程的自定义协议来源。
+     渲染进程不再由本地服务发页面，UI 文件不通过 loopback HTTP 暴露。 */
+  const allowedOrigin = value => value === origin || (rendererOrigin && value === rendererOrigin);
   function authenticate(req) {
     if (req.headers.host !== new URL(origin).host) throw new AppError('请求 Host 无效', 403);
     const supplied = Buffer.from(String(req.headers.authorization || ''));
     const expected = Buffer.from(`Bearer ${token}`);
     if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) throw new AppError('本地会话未授权', 401);
-    if (req.headers.origin && req.headers.origin !== origin) throw new AppError('请求来源无效', 403);
-    if (req.method !== 'GET' && req.headers.origin !== origin) throw new AppError('请求缺少有效来源', 403);
+    if (req.headers.origin && !allowedOrigin(req.headers.origin)) throw new AppError('请求来源无效', 403);
+    if (req.method !== 'GET' && !allowedOrigin(req.headers.origin)) throw new AppError('请求缺少有效来源', 403);
   }
+  const cors = res => {
+    if (!rendererOrigin) return;
+    res.setHeader('Access-Control-Allow-Origin', rendererOrigin);
+    res.setHeader('Vary', 'Origin');
+  };
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    cors(res);
     const json = (value, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); };
     try {
-      const url = new URL(req.url, origin), p = url.pathname;
-      if (!p.startsWith('/api/')) {
-        if (req.method !== 'GET' || req.headers.host !== new URL(origin).host) throw new AppError('页面不存在', 404);
-        const mediaTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json' };
-        const rootDir = path.resolve(staticDir);
-        let relative;
-        try { relative = decodeURIComponent(p); } catch { throw new AppError('页面不存在', 404); }
-        let file = path.resolve(rootDir, relative.replace(/^\/+/, ''));
-        if (file !== rootDir && !file.startsWith(rootDir + path.sep)) throw new AppError('页面不存在', 404);
-        const stat = await fs.stat(file).catch(() => null);
-        if (!stat?.isFile() || !mediaTypes[path.extname(file)]) file = path.join(rootDir, 'index.html');
-        res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
-        res.setHeader('Content-Type', `${mediaTypes[path.extname(file)]}; charset=utf-8`);
-        res.end(await fs.readFile(file)); return;
+      /* 自定义协议来源的写入请求会先发预检，这里必须回应，否则 POST 一律失败 */
+      if (req.method === 'OPTIONS' && rendererOrigin && req.headers.origin === rendererOrigin) {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': rendererOrigin,
+          'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+          'Access-Control-Allow-Headers': 'authorization,content-type',
+          'Access-Control-Max-Age': '600',
+          Vary: 'Origin'
+        });
+        res.end(); return;
       }
+      const url = new URL(req.url, origin), p = url.pathname;
+      if (!p.startsWith('/api/')) throw new AppError('接口不存在', 404);
       authenticate(req);
       const data = req.method === 'POST' ? await body(req, /^\/api\/projects\/[\w-]+\/import$/.test(p) ? 13 * 1048576 : 1048576) : {};
       if (req.method === 'GET' && p === '/api/bootstrap') { json({ ...store.get(), settings: config }); return; }
+      // 内置供应商目录：设置面板的"添加供应商"从这里取，不在前端写死清单
+      if (req.method === 'GET' && p === '/api/providers') { json({ providers: listProviders() }); return; }
+      const catalogModels = p.match(/^\/api\/providers\/([a-z0-9-]{1,40})\/models$/);
+      if (req.method === 'GET' && catalogModels) {
+        if (!findProvider(catalogModels[1])) throw new AppError('未知的模型供应商', 404);
+        json({ models: listModels(catalogModels[1]) }); return;
+      }
       if (req.method === 'POST' && p === '/api/projects') {
         const clean = projectInput(data);
         if (clean.workdir) { const stat = await fs.stat(clean.workdir).catch(() => null); if (!stat?.isDirectory()) throw new AppError('工作目录不存在或不是文件夹'); }

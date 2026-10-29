@@ -1,0 +1,131 @@
+/* ========================================
+   动画系统 · 规范定义
+   所有 @keyframes 的唯一真相来源。
+   命名与 HanaAgent desktop/src/animations.css 对齐，
+   以便两端动效语言可以逐条对照。
+   ======================================== */
+
+/* ── Spin ── */
+@keyframes hana-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ── Fade ── */
+@keyframes hana-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes hana-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+/* ── Fade + Slide Y（位移量由 --slide-y 控制，默认 4px）── */
+@keyframes hana-fade-up {
+    from { opacity: 0; transform: translateY(var(--slide-y, 4px)); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hana-fade-down {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(var(--slide-y, 4px)); }
+}
+
+/* ── Chat Stream Motion（短促、轻柔，仅 opacity/微位移）── */
+@keyframes hana-stream-tail-in {
+    from { opacity: 0.18; }
+    to   { opacity: 1; }
+}
+
+@keyframes hana-chat-soft-down-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hana-chat-soft-up-in {
+    from { opacity: 0; transform: translateY(3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scale + Fade ── */
+@keyframes hana-scale-in {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Popout（下拉从触发按钮位置长出）── */
+@keyframes hana-popout {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Slide X（浮窗）── */
+@keyframes hana-slide-in-left {
+    from { opacity: 0; transform: translateX(-20px) scale(0.97); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes hana-slide-in-right {
+    from { opacity: 0; transform: translateX(18px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Slide Y（面板从上方进出）── */
+@keyframes hana-slide-in-top {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hana-slide-out-top {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(-6px); }
+}
+
+/* ── Pulse（呼吸灯，亮/暗由 --pulse-lo / --pulse-hi 控制）── */
+@keyframes hana-pulse {
+    0%, 100% { opacity: var(--pulse-lo, 0.3); }
+    50%      { opacity: var(--pulse-hi, 1); }
+}
+
+/* ── Rise + Clip（确认栏、排队条上升）── */
+@keyframes hana-rise {
+    from {
+        opacity: 0;
+        transform: translateY(24px);
+        clip-path: inset(100% 0 0 0);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        clip-path: inset(0 0 0 0);
+    }
+}
+
+/* ── Rise In（纯位移，不做透明度渐变：确认卡应在出现的瞬间就是可读的）── */
+@keyframes hana-rise-in {
+    from { transform: translateY(6px); }
+    to   { transform: translateY(0); }
+}
+
+/* ── Typewriter Dots（打字点）── */
+@keyframes hana-typewriter-dots {
+    0%, 100% { content: '\00a0'; }
+    25%      { content: '.'; }
+    50%      { content: '..'; }
+    75%      { content: '...'; }
+}
+
+/* ── Cycling Dots（从一个句号开始循环）── */
+@keyframes hana-cycling-dots {
+    0%, 100% { content: '.'; }
+    33%      { content: '..'; }
+    66%      { content: '...'; }
+}
+
+/* ── Locate Flash（定位到某条证据时闪一下）── */
+@keyframes locate-flash {
+    0%   { background: rgba(var(--accent-rgb), 0.16); }
+    100% { background: transparent; }
+}

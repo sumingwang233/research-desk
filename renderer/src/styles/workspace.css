@@ -1,0 +1,202 @@
+/* ========================================
+   工作区：目录树 + 编辑器 / PDF
+   ======================================== */
+
+.workspace-view {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── 目录树 ── */
+.tree-pane {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-8) 0 var(--space-16);
+  border-right: var(--border-width) solid var(--border);
+  background: color-mix(in srgb, var(--bg) 40%, var(--bg-card));
+}
+.tree-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-12) var(--space-6);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  width: 100%;
+  padding: 5px var(--space-8);
+  font-size: var(--fs-caption);
+  color: var(--text-light);
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease;
+}
+.tree-row:hover { background: color-mix(in srgb, var(--border) 30%, transparent); color: var(--text); }
+.tree-row.selected { background: rgba(var(--accent-rgb), 0.12); color: var(--text); }
+.tree-row.selected .tree-name { font-weight: 500; }
+.tree-chev { flex: none; color: var(--text-muted); transition: transform 160ms ease; }
+.tree-chev[data-open='true'] { transform: rotate(90deg); }
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-empty,
+.tree-error {
+  margin: var(--space-8) var(--space-12);
+  font-size: var(--fs-hint);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.tree-error { color: #9a5b4a; }
+
+/* ── 右侧文件区 ── */
+.file-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.editor-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-12);
+  border-bottom: var(--border-width) solid var(--border);
+  background: color-mix(in srgb, var(--bg-card) 70%, var(--bg));
+}
+.editor-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--text-light);
+}
+.editor-dirty {
+  flex: none;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.monaco-host {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Markdown 预览 ── */
+.md-preview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-24) var(--space-32) var(--space-40);
+}
+.md-preview > .message-text { max-width: 720px; }
+
+/* ── PDF ── */
+.pdf-viewer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-6) var(--space-12);
+  border-bottom: var(--border-width) solid var(--border);
+  font-size: var(--fs-caption);
+  color: var(--text-light);
+}
+.pdf-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdf-pages { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pdf-zoom { display: flex; align-items: center; gap: var(--space-6); }
+.pdf-scale {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.pdf-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-16);
+  background: color-mix(in srgb, var(--bg) 65%, #fff);
+}
+.pdf-page {
+  background: #fff;
+  border-radius: 2px;
+  box-shadow: var(--shadow-card);
+}
+.pdf-page-number {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 图片 ── */
+.image-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-16);
+  display: grid;
+  place-items: center;
+}
+.image-preview img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+}
+
+/* ── 空态与提示 ── */
+.workspace-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-8);
+  height: 100%;
+  padding: var(--space-32);
+  text-align: center;
+  color: var(--text-light);
+  font-size: var(--fs-body);
+}
+.workspace-empty.inline { flex: 1; height: auto; }
+.workspace-empty svg { color: var(--text-muted); }
+.workspace-hint {
+  max-width: 34em;
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.viewer-note {
+  padding: var(--space-24);
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}

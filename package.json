@@ -1,6 +1,6 @@
 {
   "name": "research-desk",
-  "version": "0.2.0",
+  "version": "0.3.3",
   "private": true,
   "description": "研序 — 有据可循的科研工作台",
   "author": "Research Desk",
@@ -11,13 +11,20 @@
     "start": "electron .",
     "test": "npm run build && node --test test/core.test.mjs",
     "desktop-smoke": "npm run build && electron test/desktop-smoke.cjs",
+    "render-check": "npm run build && electron test/render-check.cjs",
+    "workspace-check": "npm run build && electron test/workspace-check.cjs",
     "packaged-smoke": "node test/packaged-smoke.mjs",
-    "dist": "npm run build && electron-builder --win portable"
+    "dist": "npm run build && electron-builder --win"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "44.7.2",
     "electron-builder": "26.15.3",
+    "highlight.js": "^11.12.0",
+    "katex": "^0.19.0",
+    "markdown-it": "^15.0.3",
+    "monaco-editor": "^0.57.0",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.0",
@@ -39,8 +46,37 @@
       "package.json"
     ],
     "win": {
-      "target": "portable",
-      "signAndEditExecutable": false
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signExecutable": false
+    },
+    "portable": {
+      "artifactName": "Research-Desk-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "artifactName": "Research-Desk-${version}-${arch}-setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "研序 Research Desk",
+      "uninstallDisplayName": "研序 Research Desk ${version}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
     },
     "artifactName": "Research-Desk-${version}-${arch}.${ext}"
   },
