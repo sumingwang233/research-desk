@@ -2,10 +2,10 @@ node_modules/
 release/
 acceptance/
 *.log
-.code-review-graph/*.db
-.code-review-graph/*.db-*
 renderer/dist/
-.code-review-graph/
+.code-review-graph/*
+!.code-review-graph/README.md
+!.code-review-graph/languages.toml
 .local/
 research-data/
 workspace/

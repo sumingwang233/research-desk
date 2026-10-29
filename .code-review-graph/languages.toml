@@ -1,0 +1,9 @@
+# code-review-graph 2.3.9 omits .cjs from its built-in JavaScript extensions.
+[languages.commonjs]
+extensions = [".cjs"]
+grammar = "javascript"
+function_node_types = ["function_declaration", "method_definition", "arrow_function"]
+class_node_types = ["class_declaration", "class"]
+import_node_types = ["import_statement"]
+call_node_types = ["call_expression", "new_expression"]
+comment = "CommonJS files parsed with the bundled JavaScript grammar"
